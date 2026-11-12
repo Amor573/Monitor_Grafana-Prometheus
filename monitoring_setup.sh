@@ -1,61 +1,47 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Install/upgrade a monitoring lab stack without exposing credentials.
+set -Eeuo pipefail
 
-set -e
+NAMESPACE="${NAMESPACE:-monitoring}"
+RELEASE_NAME="${RELEASE_NAME:-monitoring}"
+CHART_REPO="${CHART_REPO:-https://prometheus-community.github.io/helm-charts}"
+CHART_NAME="${CHART_NAME:-prometheus-community/kube-prometheus-stack}"
+CHART_VERSION="${CHART_VERSION:-}"
 
-# ------------------------------
-# Configurable Variables
-# ------------------------------
-NAMESPACE="monitoring"
-RELEASE_NAME="monitoring"
-CHART_REPO="https://prometheus-community.github.io/helm-charts"
-CHART_NAME="prometheus-community/kube-prometheus-stack"
+for cmd in kubectl helm; do
+  command -v "$cmd" >/dev/null 2>&1 || { echo "Missing required command: $cmd" >&2; exit 1; }
+done
 
-# ------------------------------
-# Functions
-# ------------------------------
+ACTIVE_CONTEXT="$(kubectl config current-context)"
+if [[ -z "${CONFIRM_CONTEXT:-}" || "$CONFIRM_CONTEXT" != "$ACTIVE_CONTEXT" ]]; then
+  echo "Refusing to modify Kubernetes context '$ACTIVE_CONTEXT'." >&2
+  echo "Review the target and re-run with CONFIRM_CONTEXT='$ACTIVE_CONTEXT'." >&2
+  exit 1
+fi
 
-create_namespace() {
-    echo "🔧 Creating namespace: $NAMESPACE (if not exists)..."
-    kubectl get namespace $NAMESPACE >/dev/null 2>&1 || kubectl create namespace $NAMESPACE
-}
+echo "Target context: $ACTIVE_CONTEXT | namespace: $NAMESPACE | release: $RELEASE_NAME"
+kubectl cluster-info >/dev/null
+helm repo add prometheus-community "$CHART_REPO" --force-update
+helm repo update prometheus-community
 
-add_helm_repo() {
-    echo "📦 Adding Helm repo for Prometheus stack..."
-    helm repo add prometheus-community $CHART_REPO
-    helm repo update
-}
+helm_args=(
+  upgrade --install "$RELEASE_NAME" "$CHART_NAME"
+  --namespace "$NAMESPACE" --create-namespace
+  --wait --timeout 10m
+)
+if [[ -n "$CHART_VERSION" ]]; then
+  helm_args+=(--version "$CHART_VERSION")
+else
+  echo "WARNING: CHART_VERSION is unset; pin a reviewed version for reproducible deployments." >&2
+fi
 
-install_stack() {
-    echo "🚀 Installing or upgrading Prometheus + Grafana stack..."
-    helm upgrade --install $RELEASE_NAME $CHART_NAME \
-        --namespace $NAMESPACE \
-        --create-namespace
-}
+helm "${helm_args[@]}"
+echo "Release details:"
+helm status "$RELEASE_NAME" --namespace "$NAMESPACE"
+echo "Workload status:"
+kubectl get pods -n "$NAMESPACE" -l "app.kubernetes.io/instance=$RELEASE_NAME"
 
-wait_for_pods() {
-    echo "⏳ Waiting for pods to be ready in '$NAMESPACE'..."
-    kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=$RELEASE_NAME -n $NAMESPACE --timeout=300s
-}
-
-show_grafana_info() {
-    echo -e "\n🔑 Grafana default credentials:"
-    echo "  ➤ Username: admin"
-    echo "  ➤ Password: $(kubectl get secret --namespace $NAMESPACE $RELEASE_NAME-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)"
-    
-    echo -e "\n🌐 To access Grafana:"
-    echo "  ➤ Run: kubectl port-forward svc/$RELEASE_NAME-grafana -n $NAMESPACE 3000:80"
-    echo "  ➤ Open: http://localhost:3000"
-}
-
-# ------------------------------
-# Main Execution
-# ------------------------------
-
-echo "🚧 Starting Monitoring Stack Setup..."
-create_namespace
-add_helm_repo
-install_stack
-wait_for_pods
-show_grafana_info
-echo "✅ Setup Complete!"
-
+echo
+echo "Grafana: kubectl -n '$NAMESPACE' port-forward svc/'$RELEASE_NAME'-grafana 3000:80"
+echo "Open http://localhost:3000 and retrieve login credentials securely from your cluster."
+echo "Admin passwords and Kubernetes Secrets are intentionally NOT printed or logged."
