@@ -1,0 +1,18 @@
+name: Validate monitoring installer
+on:
+  push:
+    paths:
+      - 'monitoring_setup.sh'
+      - '.github/workflows/lint.yml'
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  shell-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Bash syntax
+        run: bash -n monitoring_setup.sh
+      - name: ShellCheck
+        run: shellcheck -s bash monitoring_setup.sh
