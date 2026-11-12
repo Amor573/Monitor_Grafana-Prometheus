@@ -1,5 +1,18 @@
 # Kubernetes Monitoring with Prometheus & Grafana
 
+## Safe installer (updated November 2026)
+
+The script now **refuses to modify a cluster unless its exact kubeconfig context is explicitly confirmed**. It no longer prints or logs the Grafana admin password.
+
+```bash
+kubectl config current-context
+bash -n monitoring_setup.sh
+CONFIRM_CONTEXT="$(kubectl config current-context)" CHART_VERSION="<reviewed-chart-version>" bash monitoring_setup.sh
+```
+
+Choose a chart version compatible with your cluster and review its release notes first. Confirm the value returned by `kubectl config current-context` before setting `CONFIRM_CONTEXT`. This is a **lab installer**: source-code publication and static lint checks are not evidence of a successful Kubernetes deployment. See the Actions tab for lint status, and record sanitized workloads, alert delivery, and dashboard evidence after a real run.
+
+
 A Kubernetes observability lab using **Helm** to install the community `kube-prometheus-stack` chart: Prometheus, Grafana and supporting monitoring components.
 
 > **Status:** The existing installation script is documented here; a successful deployment on a live cluster has not been independently confirmed.
