@@ -61,7 +61,7 @@ Then visit `http://localhost:3000`.
 
 ### Credential safety
 
-The supplied shell script **prints the Grafana admin password to stdout** for learning purposes. Avoid using it in shared terminals or captured CI logs. For real deployments, use a managed credential source and rotate the initial admin credentials.
+The installer **no longer prints the Grafana admin password**. Retrieve credentials using your organization's approved secret-management process and never paste Secrets into public issue logs, screenshots, or CI artifacts.
 
 ## Troubleshooting
 
